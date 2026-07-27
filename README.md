@@ -17,6 +17,10 @@ keys/                 # local-only, gitignored: holds the age private key for th
 Every file under `examples/` is already encrypted with sops. Only the values are ciphertext;
 keys stay in plaintext so the structure is still diffable in git.
 
+For a full explanation of what SOPS and age are, the problem they solve, why the
+ciphertext is safe to commit, and a step-by-step encrypt/decrypt walkthrough, see
+[`docs/sops-age-walkthrough.html`](docs/sops-age-walkthrough.html).
+
 ## Prerequisites
 
 - [age](https://github.com/FiloSottile/age) (`age`, `age-keygen`)

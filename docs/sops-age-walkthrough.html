@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOPS + age: encrypting secrets you can check into git</title>
+<style>
+  :root {
+    --bg: #0b0d12;
+    --bg-panel: #12151d;
+    --bg-code: #0d1017;
+    --border: #232838;
+    --text: #e6e8ee;
+    --text-dim: #9aa3b5;
+    --accent: #6ab0ff;
+    --accent-dim: #3d5a80;
+    --good: #58d68d;
+    --bad: #e0625a;
+    --warn: #e0b155;
+    --max-width: 860px;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f7f8fa;
+      --bg-panel: #ffffff;
+      --bg-code: #eef0f4;
+      --border: #dde1ea;
+      --text: #1b1f27;
+      --text-dim: #565f70;
+      --accent: #1568c9;
+      --accent-dim: #cfe0f5;
+      --good: #1c8a52;
+      --bad: #c23b32;
+      --warn: #8a6415;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+  }
+  body {
+    padding: 0 20px 80px;
+  }
+  main {
+    max-width: var(--max-width);
+    margin: 0 auto;
+  }
+  header {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    padding: 56px 0 32px;
+  }
+  header .kicker {
+    color: var(--accent);
+    font-size: 13px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  h1 {
+    font-size: clamp(28px, 4vw, 40px);
+    margin: 8px 0 12px;
+    letter-spacing: -0.02em;
+  }
+  header p.lede {
+    color: var(--text-dim);
+    font-size: 17px;
+    max-width: 640px;
+  }
+  nav.toc {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 22px;
+    margin: 28px 0 48px;
+  }
+  nav.toc div.label {
+    font-size: 12px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+  }
+  nav.toc ol {
+    margin: 0;
+    padding-left: 20px;
+    columns: 2;
+    column-gap: 24px;
+  }
+  nav.toc li { margin-bottom: 6px; break-inside: avoid; }
+  nav.toc a { color: var(--text); text-decoration: none; }
+  nav.toc a:hover { color: var(--accent); }
+
+  section {
+    margin: 56px 0;
+    scroll-margin-top: 20px;
+  }
+  section h2 {
+    font-size: 22px;
+    letter-spacing: -0.01em;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  section h2 .num {
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  section h3 {
+    font-size: 16px;
+    margin: 28px 0 8px;
+  }
+  p { margin: 12px 0; }
+  .text-dim, .caption { color: var(--text-dim); font-size: 14px; }
+
+  code {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.9em;
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+  pre {
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-size: 13.5px;
+    line-height: 1.55;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 1em;
+  }
+  .step {
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    background: var(--bg-panel);
+    border-radius: 0 10px 10px 0;
+    padding: 18px 20px;
+    margin: 18px 0;
+  }
+  .step .step-title {
+    font-weight: 600;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .step .step-title .badge {
+    background: var(--accent-dim);
+    color: var(--accent);
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 20px 0;
+  }
+  @media (max-width: 640px) {
+    .grid-2 { grid-template-columns: 1fr; }
+    nav.toc ol { columns: 1; }
+  }
+  .card {
+    border: 1px solid var(--border);
+    background: var(--bg-panel);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+  .card h4 {
+    margin: 0 0 8px;
+    font-size: 14px;
+    letter-spacing: 0.3px;
+  }
+  .card.good h4 { color: var(--good); }
+  .card.bad h4 { color: var(--bad); }
+  .card ul { margin: 0; padding-left: 18px; }
+  .card li { margin-bottom: 6px; font-size: 14.5px; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+    font-size: 14.5px;
+  }
+  th, td {
+    text-align: left;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th {
+    color: var(--text-dim);
+    font-weight: 600;
+    font-size: 12.5px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
+  .flow {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    margin: 24px 0;
+    overflow-x: auto;
+  }
+  .flow .node {
+    flex: 1;
+    min-width: 150px;
+    border: 1px solid var(--border);
+    background: var(--bg-panel);
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-size: 13.5px;
+  }
+  .flow .node .t {
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .flow .arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 10px;
+    color: var(--text-dim);
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+  .key-pill {
+    display: inline-block;
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px 8px;
+    word-break: break-all;
+  }
+  .key-pill.pub { color: var(--good); }
+  .key-pill.priv { color: var(--bad); }
+
+  footer {
+    max-width: var(--max-width);
+    margin: 60px auto 0;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="kicker">Secrets management POC</div>
+  <h1>SOPS + age: encrypting secrets you can check into git</h1>
+  <p class="lede">
+    A walkthrough of what SOPS and age are, the problem they solve, why the resulting
+    ciphertext is safe to commit to version control, and how to actually encrypt and
+    decrypt the example secrets in this repo.
+  </p>
+</header>
+
+<main>
+
+<nav class="toc" aria-label="Table of contents">
+  <div class="label">Contents</div>
+  <ol>
+    <li><a href="#what-is-sops">What is SOPS?</a></li>
+    <li><a href="#what-is-age">What is age?</a></li>
+    <li><a href="#problem">The problem this solves</a></li>
+    <li><a href="#why-secure">Why this is more secure than "just encrypt the file"</a></li>
+    <li><a href="#why-git">Why the ciphertext is safe to commit to git</a></li>
+    <li><a href="#walkthrough">Walkthrough: encrypting and decrypting</a></li>
+  </ol>
+</nav>
+
+<section id="what-is-sops">
+  <h2><span class="num">01</span> What is SOPS?</h2>
+  <p>
+    <strong>SOPS</strong> (<em>Secrets OPerationS</em>) is an open-source tool, originally from
+    Mozilla and now maintained under the <a href="https://github.com/getsops/sops" target="_blank" rel="noopener">getsops</a>
+    organization, for encrypting and decrypting values inside structured files &mdash;
+    YAML, JSON, ENV, INI, and plain binary.
+  </p>
+  <p>
+    The key idea is that SOPS encrypts <strong>values</strong>, not the whole file. Keys,
+    structure, and comments stay in plaintext. That single design choice is why a file
+    encrypted with SOPS still looks like a YAML or JSON file, still diffs sensibly in git,
+    and can still be validated by schema tools &mdash; it just has ciphertext where the
+    secret values used to be.
+  </p>
+  <p>
+    SOPS itself doesn't do any cryptography &mdash; it delegates that to a key management
+    backend: a cloud KMS (AWS KMS, GCP KMS, Azure Key Vault), HashiCorp Vault, PGP, or
+    <strong>age</strong>. This repo uses age.
+  </p>
+</section>
+
+<section id="what-is-age">
+  <h2><span class="num">02</span> What is age?</h2>
+  <p>
+    <strong>age</strong> (&ldquo;actually good encryption&rdquo;) is a modern, simple file
+    encryption tool created by Filippo Valsorda, designed as a smaller, harder-to-misuse
+    alternative to PGP/GPG for this exact use case: encrypting a file to a recipient's
+    public key.
+  </p>
+  <div class="grid-2">
+    <div class="card">
+      <h4>An age key pair</h4>
+      <ul>
+        <li>Public key (recipient): <span class="key-pill pub">age1d99kgmr6fd76fzck9pz0xv6vtfzzksemsl4ztz62pmtvwska4dfqlmlgfg</span></li>
+        <li>Private key (identity): <span class="key-pill priv">AGE-SECRET-KEY-1QYA46XR37...</span></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Under the hood</h4>
+      <ul>
+        <li>X25519 (Curve25519 Diffie-Hellman) for the key exchange</li>
+        <li>ChaCha20-Poly1305 for authenticated encryption of the content</li>
+        <li>No keyservers, no web of trust, no key expiry dates to manage</li>
+      </ul>
+    </div>
+  </div>
+  <p>
+    That's the whole key model: one public key you can hand out freely to encrypt
+    <em>to</em> you, one private key you keep secret to decrypt. No GPG keyring, no
+    trust levels, no multi-megabyte key files.
+  </p>
+</section>
+
+<section id="problem">
+  <h2><span class="num">03</span> The problem this solves</h2>
+  <p>Every team ends up needing to answer: <em>where do our secrets live?</em> The usual answers all have a gap:</p>
+  <div class="grid-2">
+    <div class="card bad">
+      <h4>Plaintext in git</h4>
+      <ul>
+        <li>Anyone with repo/clone access has every secret, forever, in history</li>
+        <li>Revoking access doesn't revoke exposure &mdash; the secret is already out</li>
+        <li>Deleting the file doesn't remove it from git history</li>
+      </ul>
+    </div>
+    <div class="card bad">
+      <h4><code>.env</code> kept out of git</h4>
+      <ul>
+        <li>No version history, no diff, no code review on secret changes</li>
+        <li>Distributed by Slack/email/AirDrop &mdash; each hop is a leak surface</li>
+        <li>Easy for one environment to silently drift from another</li>
+      </ul>
+    </div>
+    <div class="card bad">
+      <h4>A separate secrets vault only</h4>
+      <ul>
+        <li>Extra infrastructure to run, patch, and back up</li>
+        <li>Secrets are disconnected from the code/config that uses them</li>
+        <li>Still need a bootstrapping secret to authenticate to the vault itself</li>
+      </ul>
+    </div>
+    <div class="card good">
+      <h4>SOPS + age</h4>
+      <ul>
+        <li>Secrets live next to the config that uses them, version-controlled</li>
+        <li>Every change to a secret goes through normal git history / PR review</li>
+        <li>No extra service to run &mdash; just a CLI and a key pair</li>
+      </ul>
+    </div>
+  </div>
+  <p>
+    In short: teams want secrets to be <strong>versioned, reviewable, and colocated</strong>
+    with the config that consumes them, without handing plaintext credentials to everyone
+    who can read the repository.
+  </p>
+</section>
+
+<section id="why-secure">
+  <h2><span class="num">04</span> Why this is more secure than &ldquo;just encrypt the file&rdquo;</h2>
+  <p>
+    It's tempting to think "encryption is encryption" &mdash; just <code>gpg -c</code> or
+    <code>openssl enc</code> the whole file with a passphrase and commit that. SOPS + age
+    is a meaningfully different, stronger model:
+  </p>
+  <table>
+    <thead>
+      <tr><th></th><th>Ad-hoc symmetric encryption</th><th>SOPS + age</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Key distribution</td>
+        <td>A shared passphrase has to reach every team member out-of-band &mdash; itself a leak risk, and it's the same secret for everyone</td>
+        <td>Asymmetric: hand out the public key freely. Anyone can encrypt <em>to</em> a recipient without ever holding the thing that decrypts it</td>
+      </tr>
+      <tr>
+        <td>Multiple recipients</td>
+        <td>Everyone shares one passphrase &mdash; revoking one person means rotating and redistributing to everyone</td>
+        <td>SOPS can encrypt the same file's data key to several age/KMS recipients independently &mdash; remove one recipient without touching the others' access</td>
+      </tr>
+      <tr>
+        <td>What's readable in a diff</td>
+        <td>The whole file is one opaque blob &mdash; <code>git diff</code> shows nothing useful</td>
+        <td>Only values are ciphertext; structure, keys, and comments stay readable, so reviewers can see <em>which</em> secret changed</td>
+      </tr>
+      <tr>
+        <td>Tamper detection</td>
+        <td>Usually none &mdash; a corrupted or edited blob may decrypt to garbage silently</td>
+        <td>SOPS stores a MAC over the whole document; any change to keys/values/structure without re-encrypting is detected on decrypt</td>
+      </tr>
+      <tr>
+        <td>Rotation</td>
+        <td>Re-encrypt and redistribute the new passphrase to every human by hand</td>
+        <td><code>sops rotate</code> / <code>sops updatekeys</code> re-wraps the data key for new recipients without needing a shared secret handoff</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    The core reason this is stronger isn't a "better cipher" &mdash; ChaCha20-Poly1305 and
+    AES-GCM are both fine. It's that the <strong>key management problem is solved
+    correctly</strong>: asymmetric keys mean encrypting never requires possessing the secret
+    that decrypts, and per-recipient wrapping means access can be granted or revoked per
+    person without a global secret rotation.
+  </p>
+</section>
+
+<section id="why-git">
+  <h2><span class="num">05</span> Why the ciphertext is safe to commit to git</h2>
+  <p>
+    Committing the <em>output</em> of SOPS is safe for the same reason it's safe to publish
+    a TLS certificate's ciphertext on the wire: what's stored is not the secret, it's data
+    that is computationally infeasible to reverse without one of the matching private keys.
+  </p>
+  <div class="flow">
+    <div class="node">
+      <div class="t">Plaintext value</div>
+      <div class="text-dim">e.g. a database password</div>
+    </div>
+    <div class="arrow">&rarr;</div>
+    <div class="node">
+      <div class="t">Data key</div>
+      <div class="text-dim">random per-file key, generated once</div>
+    </div>
+    <div class="arrow">&rarr;</div>
+    <div class="node">
+      <div class="t">AES256-GCM</div>
+      <div class="text-dim">encrypts each value with the data key</div>
+    </div>
+    <div class="arrow">&rarr;</div>
+    <div class="node">
+      <div class="t">age wraps the data key</div>
+      <div class="text-dim">to each recipient's public key</div>
+    </div>
+    <div class="arrow">&rarr;</div>
+    <div class="node">
+      <div class="t">Committed to git</div>
+      <div class="text-dim">only ciphertext + wrapped data key</div>
+    </div>
+  </div>
+  <p>What actually lands in the repo is:</p>
+  <ul>
+    <li>Each secret value, individually encrypted (visible as <code>ENC[AES256_GCM,...]</code>)</li>
+    <li>A per-file data key, itself encrypted (&ldquo;wrapped&rdquo;) to every configured age recipient's <strong>public</strong> key</li>
+    <li>A MAC over the document so any tampering is detectable</li>
+  </ul>
+  <p>
+    None of that is reversible without an age <strong>private</strong> key matching one of the
+    recipients &mdash; and the private key never goes into the repo (it's gitignored in this
+    POC, exactly like a private key should be). Someone who clones the repo gets the
+    ciphertext and the public key it's addressed to; they cannot decrypt anything with only
+    those two things, any more than they could decrypt HTTPS traffic just by watching it.
+  </p>
+  <p class="text-dim">
+    The threat model this doesn't cover: if the private key itself leaks (e.g. someone
+    accidentally commits <code>keys/age-key.txt</code>), the secrets encrypted to it are
+    compromised, same as any key-based system. That's why the private key is the one thing
+    in this workflow that must never be checked in.
+  </p>
+</section>
+
+<section id="walkthrough">
+  <h2><span class="num">06</span> Walkthrough: encrypting and decrypting</h2>
+  <p>This walks through the exact files in this repo: <code>.sops.yaml</code> and <code>examples/secrets.yaml</code>.</p>
+
+  <h3>0. Prerequisites</h3>
+  <pre><code># age &amp; sops CLIs on your machine
+age --version
+sops --version</code></pre>
+
+  <div class="step">
+    <div class="step-title"><span class="badge">Step 1</span> Generate an age key pair</div>
+    <p>This produces both keys as one file &mdash; the comment lines contain the public key, the last line is the private key.</p>
+    <pre><code>age-keygen -o keys/age-key.txt</code></pre>
+    <pre><code># created: 2026-07-27T10:44:45Z
+# public key: age1d99kgmr6fd76fzck9pz0xv6vtfzzksemsl4ztz62pmtvwska4dfqlmlgfg
+AGE-SECRET-KEY-1QYA46XR37MVS30CD2TAKNE08V5JHLYEMNXGQFSANW43MSU6UYQCSFJMRU4</code></pre>
+    <p class="caption"><code>keys/age-key.txt</code> is gitignored &mdash; it never gets committed.</p>
+  </div>
+
+  <div class="step">
+    <div class="step-title"><span class="badge">Step 2</span> Point <code>.sops.yaml</code> at the public key</div>
+    <p>This is the only place the <strong>public</strong> key needs to live, and it's safe to commit &mdash; it tells SOPS which recipient(s) new files under <code>examples/</code> should be encrypted to.</p>
+    <pre><code>keys:
+  - &amp;poc_age age1d99kgmr6fd76fzck9pz0xv6vtfzzksemsl4ztz62pmtvwska4dfqlmlgfg
+
+creation_rules:
+  - path_regex: examples/.*\.yaml$
+    age: *poc_age
+  - path_regex: examples/.*\.json$
+    age: *poc_age
+  - path_regex: examples/.*\.env$
+    age: *poc_age</code></pre>
+  </div>
+
+  <div class="step">
+    <div class="step-title"><span class="badge">Step 3</span> Write the secret as plain YAML</div>
+    <pre><code># examples/secrets.yaml, before encryption
+database:
+  host: db.internal.example.com
+  username: app_user
+  password: correct-horse-battery-staple
+api:
+  stripe_key: sk_test_51NfakeKeyForDemoPurposesOnly
+  jwt_secret: super-secret-jwt-signing-key</code></pre>
+  </div>
+
+  <div class="step">
+    <div class="step-title"><span class="badge">Step 4</span> Encrypt it in place</div>
+    <pre><code>sops -e -i examples/secrets.yaml</code></pre>
+    <p>SOPS reads <code>.sops.yaml</code>, matches the path against <code>path_regex</code>, generates a random data key, encrypts each value, wraps the data key to <code>poc_age</code>, and rewrites the file:</p>
+    <pre><code>database:
+    host: ENC[AES256_GCM,data:7Bb5fPaCmut2yv7Q96yqiXwVlWHPa9k=,iv:NoAAK3q...,tag:ggiWAWiR5CtCjdTUfZnuuA==,type:str]
+    username: ENC[AES256_GCM,data:nGRsFVO6kG4=,iv:c3dXiEZwDwPTjghW...,tag:QeoCG5uaYlytjTNr+fL3xw==,type:str]
+    password: ENC[AES256_GCM,data:hnQ/n3cEmupJ2i5wLOZgj/1oQwMhbxJIkPUQ+Q==,iv:Ctm1c5vdcTJWBTH8E4f2...,tag:GcASDFvFnRijGdLXZPISxA==,type:str]
+api:
+    stripe_key: ENC[AES256_GCM,data:VGqiKnIioNwhpHKkc52znQ5F+lgWxU43NdX0dNhkTeILMLm8VQ==,iv:f1C6N8pBW7Au...,tag:Y0cSkDbDDDytwW36genfSg==,type:str]
+    jwt_secret: ENC[AES256_GCM,data:/UzFipC4rxr4X3P5lFX3tJQ/FbqrsPgsidgAfw==,iv:a3RdGanZQjQsUAJJ...,tag:vW+3H63q0jDwuMvcY5ROjg==,type:str]
+sops:
+    age:
+        - recipient: age1d99kgmr6fd76fzck9pz0xv6vtfzzksemsl4ztz62pmtvwska4dfqlmlgfg
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            ...
+            -----END AGE ENCRYPTED FILE-----
+    mac: ENC[AES256_GCM,data:qWdabEl5xDZL5jFOZsfUDsbtLZAaYk8Fd2tz2mDEeVTG0Xd...,type:str]
+    version: 3.9.4</code></pre>
+    <p class="text-dim">This is exactly what's checked into <code>examples/secrets.yaml</code> in this repo &mdash; note the top-level keys (<code>database</code>, <code>api</code>, <code>host</code>, <code>password</code>, ...) are still plaintext, only the values changed.</p>
+  </div>
+
+  <div class="step">
+    <div class="step-title"><span class="badge">Step 5</span> Decrypt it</div>
+    <p>Point SOPS at your private key file, then decrypt to stdout:</p>
+    <pre><code>export SOPS_AGE_KEY_FILE=$(pwd)/keys/age-key.txt
+sops -d examples/secrets.yaml</code></pre>
+    <pre><code>database:
+    host: db.internal.example.com
+    username: app_user
+    password: correct-horse-battery-staple
+api:
+    stripe_key: sk_test_51NfakeKeyForDemoPurposesOnly
+    jwt_secret: super-secret-jwt-signing-key</code></pre>
+    <p>SOPS unwraps the data key using your age private key, verifies the MAC (detecting any tampering), then decrypts each value back to plaintext.</p>
+  </div>
+
+  <div class="step">
+    <div class="step-title"><span class="badge">Step 6</span> Edit a secret without ever seeing a diff of ciphertext noise</div>
+    <pre><code>sops examples/secrets.yaml</code></pre>
+    <p>This decrypts the file into a temp buffer, opens it in <code>$EDITOR</code>, and re-encrypts on save &mdash; you edit plaintext, the file on disk stays ciphertext.</p>
+  </div>
+
+  <div class="step">
+    <div class="step-title"><span class="badge">Step 7</span> Add or rotate recipients</div>
+    <pre><code># add a teammate's public key to .sops.yaml, then:
+sops updatekeys examples/secrets.yaml
+
+# or rotate the data key without changing who can decrypt:
+sops -r -i examples/secrets.yaml</code></pre>
+    <p><code>updatekeys</code> re-wraps the existing data key to the new recipient set &mdash; no need to know the plaintext or coordinate a passphrase handoff with anyone.</p>
+  </div>
+
+  <p>
+    See <a href="../README.md">README.md</a> for the same commands applied to the
+    <code>examples/secrets.json</code> and <code>examples/secrets.env</code> variants in this repo.
+  </p>
+</section>
+
+</main>
+
+<footer>
+  Part of the SOPS + age secrets encryption POC in this repository.
+</footer>
+
+</body>
+</html>
