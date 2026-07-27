@@ -1,0 +1,10 @@
+keys:
+  - &poc_age age1d99kgmr6fd76fzck9pz0xv6vtfzzksemsl4ztz62pmtvwska4dfqlmlgfg
+
+creation_rules:
+  - path_regex: examples/.*\.yaml$
+    age: *poc_age
+  - path_regex: examples/.*\.json$
+    age: *poc_age
+  - path_regex: examples/.*\.env$
+    age: *poc_age
